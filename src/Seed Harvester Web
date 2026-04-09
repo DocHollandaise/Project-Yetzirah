@@ -8,126 +8,214 @@
     <style>
         body { margin: 0; background-color: #050505; color: #e5e7eb; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
         .glass { background: rgba(15, 15, 15, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-bright { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); }
         input::placeholder { color: #4b5563; }
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #ea580c; border-radius: 10px; }
+        @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .animate-pulse-slow { animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-8 flex flex-col items-center">
 
-    <div class="w-full max-w-4xl space-y-6">
+    <div class="w-full max-w-5xl space-y-6">
         <!-- Header -->
         <header class="flex justify-between items-center glass p-6 rounded-2xl">
             <div>
                 <h1 class="text-2xl font-black tracking-tighter text-orange-500 uppercase italic">Yoga Fire</h1>
-                <p class="text-[10px] font-mono text-gray-400 uppercase tracking-widest">Seed Harvester v1.0</p>
+                <p class="text-[10px] font-mono text-gray-400 uppercase tracking-widest">Seed Harvester v1.1 <span class="text-orange-900 ml-2">// COD API BRIDGE</span></p>
             </div>
-            <div class="text-right">
-                <span class="text-xs font-mono text-green-400 bg-green-950/30 px-2 py-1 rounded">CORS PROXY: ACTIVE</span>
+            <div class="text-right flex flex-col items-end">
+                <span id="proxy-status" class="text-[10px] font-mono text-green-400 bg-green-950/30 px-2 py-1 rounded">TUNNEL: STANDBY</span>
+                <span class="text-[9px] text-gray-500 mt-1 uppercase tracking-tighter">Powered by AllOrigins Proxy</span>
             </div>
         </header>
 
-        <!-- Search Bar -->
-        <section class="glass p-6 rounded-2xl flex gap-4">
-            <input type="text" id="search-input" placeholder="Search Mineral (e.g., Quartz, Beryl, Diamond)..." 
-                   class="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 transition-all font-mono text-sm">
-            <button id="search-btn" class="bg-orange-600 hover:bg-orange-500 px-8 py-3 rounded-xl font-bold transition-all text-sm">HARVEST</button>
-        </section>
+        <!-- Control Center -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <!-- Search -->
+            <section class="lg:col-span-3 glass p-4 rounded-2xl flex gap-3">
+                <input type="text" id="search-input" placeholder="Search Mineral (e.g., Quartz, Beryl, Diamond)..." 
+                       class="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 transition-all font-mono text-sm">
+                <button id="search-btn" class="bg-orange-600 hover:bg-orange-500 px-8 py-3 rounded-xl font-bold transition-all text-sm whitespace-nowrap">
+                    HARVEST VAULT
+                </button>
+            </section>
+            <!-- Manual ID Override -->
+            <section class="lg:col-span-1 glass p-4 rounded-2xl flex gap-2">
+                <input type="text" id="manual-id" placeholder="COD ID" 
+                       class="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 outline-none focus:border-green-500 transition-all font-mono text-xs text-center">
+                <button id="id-btn" class="bg-green-700 hover:bg-green-600 px-3 rounded-xl text-xs font-bold transition-all">GO</button>
+            </section>
+        </div>
 
-        <!-- Main Display -->
-        <main class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Main Workspace -->
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <!-- Results List -->
-            <div class="md:col-span-1 glass rounded-2xl overflow-hidden flex flex-col h-[600px]">
-                <div class="p-4 border-b border-white/10 bg-white/5 font-mono text-[10px] uppercase tracking-widest text-gray-400">COD Search Results</div>
-                <div id="results-list" class="flex-1 overflow-y-auto custom-scroll p-2 space-y-2">
-                    <div class="p-4 text-center text-gray-600 text-xs italic mt-20">No seeds harvested yet.</div>
+            <div class="lg:col-span-4 glass rounded-2xl overflow-hidden flex flex-col h-[650px]">
+                <div class="p-4 border-b border-white/10 bg-white/5 font-mono text-[10px] uppercase tracking-widest text-gray-400 flex justify-between">
+                    <span>Search Results</span>
+                    <span id="result-count" class="text-orange-500">0 FOUND</span>
+                </div>
+                <div id="results-list" class="flex-1 overflow-y-auto custom-scroll p-3 space-y-2">
+                    <div class="h-full flex flex-col items-center justify-center text-center p-8">
+                        <div class="text-gray-700 mb-2">● ● ●</div>
+                        <p class="text-gray-600 text-xs italic">Enter a mineral name above to scan the Crystallography Open Database.</p>
+                    </div>
                 </div>
             </div>
 
             <!-- Seed Preview -->
-            <div class="md:col-span-2 glass rounded-2xl overflow-hidden flex flex-col h-[600px]">
+            <div class="lg:col-span-8 glass rounded-2xl overflow-hidden flex flex-col h-[650px]">
                 <div class="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center">
-                    <span class="font-mono text-[10px] uppercase tracking-widest text-gray-400 italic">Seed DNA Preview</span>
-                    <button id="download-btn" class="hidden text-[10px] font-bold bg-green-600 hover:bg-green-500 text-white px-3 py-1 rounded uppercase transition-all">Download .json</button>
+                    <div class="flex items-center gap-3">
+                        <span class="font-mono text-[10px] uppercase tracking-widest text-gray-400 italic">Seed DNA Preview</span>
+                        <div id="loading-indicator" class="hidden h-2 w-2 rounded-full bg-orange-500 animate-pulse"></div>
+                    </div>
+                    <div class="flex gap-2">
+                         <button id="copy-btn" class="hidden text-[10px] font-bold glass-bright hover:bg-white/10 text-gray-300 px-3 py-1 rounded uppercase transition-all">Copy to Clipboard</button>
+                         <button id="download-btn" class="hidden text-[10px] font-bold bg-orange-600 hover:bg-orange-500 text-white px-3 py-1 rounded uppercase transition-all">Download .json</button>
+                    </div>
                 </div>
-                <pre id="seed-preview" class="flex-1 p-6 font-mono text-[11px] overflow-auto text-orange-400/80 leading-relaxed custom-scroll">
-// Select a seed to view its Material DNA...
-                </pre>
+                <div class="flex-1 relative overflow-hidden flex flex-col">
+                    <pre id="seed-preview" class="flex-1 p-6 font-mono text-[12px] overflow-auto text-orange-400/90 leading-relaxed custom-scroll bg-black/20">
+// Select a seed from the left or enter a COD ID to generate its Material DNA.
+// The "Strong Force" calculations will appear here.
+                    </pre>
+                    <!-- Citation Toast -->
+                    <div id="citation-bar" class="hidden p-3 bg-blue-950/40 border-t border-blue-900/50 text-[10px] font-mono text-blue-300 px-6">
+                        SOURCE: <span id="citation-text">...</span>
+                    </div>
+                </div>
             </div>
         </main>
+        
+        <footer class="text-center text-[9px] font-mono text-gray-600 uppercase tracking-[0.2em]">
+            Prior Art Declaration // Subtractive Voxel Saturation // April 2026
+        </footer>
     </div>
 
     <script type="module">
         const searchInput = document.getElementById('search-input');
         const searchBtn = document.getElementById('search-btn');
+        const manualId = document.getElementById('manual-id');
+        const idBtn = document.getElementById('id-btn');
         const resultsList = document.getElementById('results-list');
         const seedPreview = document.getElementById('seed-preview');
         const downloadBtn = document.getElementById('download-btn');
+        const copyBtn = document.getElementById('copy-btn');
+        const proxyStatus = document.getElementById('proxy-status');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const citationBar = document.getElementById('citation-bar');
+        const citationText = document.getElementById('citation-text');
+        const resultCountLabel = document.getElementById('result-count');
 
-        // Proxy to bypass CORS
-        const PROXY = "https://api.allorigins.win/raw?url=";
-        const COD_BASE = "https://www.crystallography.net/cod";
-
-        // Material Estimation Table
+        // Material Estimation Table (The "Oven" Presets)
         const PROPERTY_LOOKUP = {
-            "SiO2": { n: 1.544, rho: 2.65, E: 95.0 },
-            "Al2O3": { n: 1.768, rho: 3.98, E: 400.0 },
-            "C": { n: 2.417, rho: 3.51, E: 1220.0 },
-            "Be3Al2Si6O18": { n: 1.577, rho: 2.76, E: 220.0 },
-            "CaCO3": { n: 1.658, rho: 2.71, E: 73.0 }
+            "SiO2": { n: 1.544, rho: 2.65, E: 95.0, name: "Alpha Quartz" },
+            "Al2O3": { n: 1.768, rho: 3.98, E: 400.0, name: "Corundum" },
+            "C": { n: 2.417, rho: 3.51, E: 1220.0, name: "Diamond" },
+            "Be3Al2Si6O18": { n: 1.577, rho: 2.76, E: 220.0, name: "Beryl" },
+            "CaCO3": { n: 1.658, rho: 2.71, E: 73.0, name: "Calcite" }
         };
 
         let currentSeed = null;
+
+        /**
+         * Robust proxy bridge using AllOrigins.
+         * Bypasses CORS by wrapping the request in a CORS-friendly URL.
+         */
+        async function fetchFromCOD(endpoint) {
+            const url = `https://www.crystallography.net/cod/${endpoint}`;
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            
+            proxyStatus.textContent = "TUNNEL: ACTIVE";
+            proxyStatus.classList.replace('text-green-400', 'text-orange-400');
+            
+            try {
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response;
+            } finally {
+                setTimeout(() => {
+                    proxyStatus.textContent = "TUNNEL: STANDBY";
+                    proxyStatus.classList.replace('text-orange-400', 'text-green-400');
+                }, 1000);
+            }
+        }
 
         searchBtn.onclick = async () => {
             const query = searchInput.value.trim();
             if (!query) return;
 
             searchBtn.disabled = true;
-            searchBtn.textContent = "SEARCHING...";
-            resultsList.innerHTML = '<div class="p-4 text-center text-orange-500 animate-pulse text-xs">Accessing Vault...</div>';
+            searchBtn.textContent = "SCANNING...";
+            resultsList.innerHTML = `
+                <div class="h-full flex flex-col items-center justify-center p-8 animate-pulse-slow">
+                    <div class="w-12 h-1 bg-orange-900 mb-4 rounded-full overflow-hidden">
+                        <div class="w-1/2 h-full bg-orange-500"></div>
+                    </div>
+                    <p class="text-orange-500/50 text-[10px] font-mono tracking-widest uppercase">Querying COD Vault...</p>
+                </div>
+            `;
 
             try {
-                const searchUrl = encodeURIComponent(`${COD_BASE}/result.json?text=${query}`);
-                const response = await fetch(`${PROXY}${searchUrl}`);
+                // Fetching search results from COD as JSON
+                const response = await fetchFromCOD(`result.json?text=${encodeURIComponent(query)}`);
                 const data = await response.json();
-                
                 renderResults(data);
             } catch (err) {
-                resultsList.innerHTML = `<div class="p-4 text-red-500 text-xs">Error: ${err.message}</div>`;
+                resultsList.innerHTML = `
+                    <div class="p-8 text-red-500 text-xs font-mono text-center">
+                        ERROR: ${err.message}<br><br>
+                        <span class="text-gray-600">The AllOrigins tunnel might be temporarily blocked or overloaded. Try using a specific COD ID in the manual override box.</span>
+                    </div>`;
             } finally {
                 searchBtn.disabled = false;
-                searchBtn.textContent = "HARVEST";
+                searchBtn.textContent = "HARVEST VAULT";
             }
+        };
+
+        idBtn.onclick = () => {
+            const id = manualId.value.trim();
+            if (id) harvestSeed(id);
         };
 
         function renderResults(data) {
             resultsList.innerHTML = '';
             if (!data || data.length === 0) {
-                resultsList.innerHTML = '<div class="p-4 text-gray-500 text-xs italic">No minerals found.</div>';
+                resultCountLabel.textContent = "0 FOUND";
+                resultsList.innerHTML = '<div class="p-8 text-gray-600 text-xs italic text-center mt-20">No matching minerals found. Try a chemical formula like "SiO2" or a common name.</div>';
                 return;
             }
 
-            data.slice(0, 20).forEach(item => {
+            resultCountLabel.textContent = `${data.length} FOUND`;
+
+            data.slice(0, 50).forEach(item => {
                 const el = document.createElement('div');
-                el.className = "p-3 glass hover:bg-orange-600/20 cursor-pointer rounded-xl border-white/5 transition-all group";
+                el.className = "p-4 glass hover:bg-orange-600/10 cursor-pointer rounded-xl border-white/5 transition-all group border-l-2 border-l-transparent hover:border-l-orange-500";
                 el.innerHTML = `
-                    <div class="text-[10px] font-mono text-orange-500 mb-1">COD: ${item.file}</div>
-                    <div class="text-xs font-bold text-gray-300 truncate group-hover:text-white">${item.formula || 'Unknown Formula'}</div>
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-[10px] font-mono text-orange-500/70">COD: ${item.file}</span>
+                        <span class="text-[9px] text-gray-600 bg-white/5 px-1 rounded uppercase">${item.vol || 'Cell'}</span>
+                    </div>
+                    <div class="text-xs font-bold text-gray-300 truncate group-hover:text-white">${item.formula || 'Unknown Lattice'}</div>
                 `;
-                el.onclick = () => harvestCIF(item.file);
+                el.onclick = () => harvestSeed(item.file);
                 resultsList.appendChild(el);
             });
         }
 
-        async function harvestCIF(id) {
-            seedPreview.textContent = "// Harvesting CIF and generating DNA...";
+        async function harvestSeed(id) {
+            loadingIndicator.classList.remove('hidden');
+            seedPreview.textContent = `// INITIATING SUTURE FOR COD_${id}...\n// FETCHING CRYSTALLOGRAPHIC DATA...`;
             downloadBtn.classList.add('hidden');
+            copyBtn.classList.add('hidden');
+            citationBar.classList.add('hidden');
 
             try {
-                const cifUrl = encodeURIComponent(`${COD_BASE}/${id}.cif`);
-                const response = await fetch(`${PROXY}${cifUrl}`);
+                const response = await fetchFromCOD(`${id}.cif`);
                 const text = await response.text();
                 
                 const seed = parseCIF(id, text);
@@ -135,8 +223,16 @@
                 
                 seedPreview.textContent = JSON.stringify(seed, null, 2);
                 downloadBtn.classList.remove('hidden');
+                copyBtn.classList.remove('hidden');
+                
+                if (seed.metadata.citation !== "Unknown") {
+                    citationText.textContent = seed.metadata.citation;
+                    citationBar.classList.remove('hidden');
+                }
             } catch (err) {
-                seedPreview.textContent = `// Error harvesting seed: ${err.message}`;
+                seedPreview.textContent = `// FATAL ERROR IN SUTURE BRIDGE:\n// ${err.message}`;
+            } finally {
+                loadingIndicator.classList.add('hidden');
             }
         }
 
@@ -145,41 +241,49 @@
             const dna = {
                 seed_id: `cod_${id}`,
                 metadata: {
+                    name: "Unknown Mineral",
                     source: "Crystallography Open Database",
                     cod_id: id,
                     citation: "Unknown",
                     formula: "Unknown"
                 },
                 material_dna: {
-                    mechanical: { bulk_density: 0, youngs_modulus: 0 },
-                    optical: { refractive_index_base: 1.0 },
+                    mechanical: { bulk_density: 0, youngs_modulus: 0, poisson_ratio: 0.2 },
+                    optical: { refractive_index_base: 1.0, birefringence: 0.0 },
                     acoustic: { phonon_velocity: 0 }
                 },
                 lattice_logic: { unit_cell: {} }
             };
 
-            const getValue = (line) => parseFloat(line.split(/\s+/).pop().replace(/\(.*\)/, ''));
+            const getValue = (line) => {
+                const parts = line.split(/\s+/);
+                const raw = parts[parts.length - 1];
+                return parseFloat(raw.replace(/\(.*\)/, ''));
+            };
 
             lines.forEach(line => {
-                if (line.includes('_cell_length_a')) dna.lattice_logic.unit_cell.a = getValue(line);
-                if (line.includes('_cell_length_b')) dna.lattice_logic.unit_cell.b = getValue(line);
-                if (line.includes('_cell_length_c')) dna.lattice_logic.unit_cell.c = getValue(line);
-                if (line.includes('_cell_angle_alpha')) dna.lattice_logic.unit_cell.alpha = getValue(line);
-                if (line.includes('_cell_angle_beta')) dna.lattice_logic.unit_cell.beta = getValue(line);
-                if (line.includes('_cell_angle_gamma')) dna.lattice_logic.unit_cell.gamma = getValue(line);
-                if (line.includes('_chemical_formula_sum')) {
-                    const formula = line.replace('_chemical_formula_sum', '').replace(/'/g, '').trim();
-                    dna.metadata.formula = formula;
+                const l = line.trim();
+                if (l.startsWith('_cell_length_a')) dna.lattice_logic.unit_cell.a = getValue(l);
+                if (l.startsWith('_cell_length_b')) dna.lattice_logic.unit_cell.b = getValue(l);
+                if (l.startsWith('_cell_length_c')) dna.lattice_logic.unit_cell.c = getValue(l);
+                if (l.startsWith('_cell_angle_alpha')) dna.lattice_logic.unit_cell.alpha = getValue(l);
+                if (l.startsWith('_cell_angle_beta')) dna.lattice_logic.unit_cell.beta = getValue(l);
+                if (l.startsWith('_cell_angle_gamma')) dna.lattice_logic.unit_cell.gamma = getValue(l);
+                
+                if (l.startsWith('_chemical_formula_sum')) {
+                    const f = l.replace('_chemical_formula_sum', '').replace(/'/g, '').trim();
+                    dna.metadata.formula = f;
                 }
-                if (line.includes('_publ_section_title')) {
-                    dna.metadata.citation = line.replace('_publ_section_title', '').trim().replace(/^'|'$/g, '');
+                if (l.startsWith('_publ_section_title')) {
+                    dna.metadata.citation = l.replace('_publ_section_title', '').trim().replace(/^'|'$/g, '');
                 }
             });
 
-            // Estimation
+            // Estimation Step: Applying Material Presets to the Suture
             const formula = dna.metadata.formula;
-            const props = PROPERTY_LOOKUP[formula] || { n: 1.5, rho: 2.5, E: 70.0 };
+            const props = PROPERTY_LOOKUP[formula] || { n: 1.5, rho: 2.5, E: 70.0, name: "Generic Silicate" };
             
+            dna.metadata.name = props.name;
             dna.material_dna.optical.refractive_index_base = props.n;
             dna.material_dna.mechanical.bulk_density = props.rho;
             dna.material_dna.mechanical.youngs_modulus = props.E;
@@ -191,13 +295,25 @@
         downloadBtn.onclick = () => {
             if (!currentSeed) return;
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentSeed, null, 2));
-            const downloadAnchorNode = document.createElement('a');
-            downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", `${currentSeed.seed_id}.json`);
-            document.body.appendChild(downloadAnchorNode);
-            downloadAnchorNode.click();
-            downloadAnchorNode.remove();
+            const dl = document.createElement('a');
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", `${currentSeed.seed_id}.json`);
+            dl.click();
+        };
+
+        copyBtn.onclick = () => {
+            if (!currentSeed) return;
+            const text = JSON.stringify(currentSeed, null, 2);
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            copyBtn.textContent = "COPIED!";
+            setTimeout(() => copyBtn.textContent = "Copy to Clipboard", 2000);
         };
     </script>
 </body>
 </html>
+<!-- Project Yetzirah: Seed Harvester Web v1.1 -->
