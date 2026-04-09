@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yoga Fire | The Kiln Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; background-color: #050505; color: #e5e7eb; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
+        canvas { width: 100vw; height: 100vh; display: block; }
+        .ui-overlay { pointer-events: none; }
+        .ui-element { pointer-events: auto; }
+        .glass { background: rgba(15, 15, 15, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body>
+
+    <div id="no-webgpu" class="fixed inset-0 flex items-center justify-center bg-black z-50 hidden p-6 text-center">
+        <div class="glass p-8 rounded-2xl max-w-md">
+            <h1 class="text-2xl font-bold text-orange-500 mb-4">WebGPU Not Detected</h1>
+            <p class="text-gray-400 mb-6">The Yoga Fire Kiln requires a browser with WebGPU support (Chrome 113+, Edge, or Firefox Nightly). If you are on mobile, WebGPU support is still emerging.</p>
+            <button onclick="location.reload()" class="ui-element px-6 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg transition-colors">Retry Ignition</button>
+        </div>
+    </div>
+
+    <canvas id="kiln-canvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div class="ui-overlay fixed inset-0 flex flex-col justify-between p-6">
+        <!-- Top Header -->
+        <div class="flex justify-between items-start">
+            <div class="glass p-4 rounded-xl">
+                <h1 class="text-xl font-black tracking-tighter text-orange-500">YOGA FIRE <span class="text-xs font-mono text-gray-500 ml-2">v0.1.0-alpha</span></h1>
+                <p class="text-[10px] font-mono text-gray-400 uppercase tracking-widest">Subtractive Reality Engine</p>
+            </div>
+            <div class="glass p-4 rounded-xl text-right">
+                <div id="status-label" class="text-xs font-mono text-green-400 underline decoration-green-900">SYSTEM: SATURATED</div>
+                <div id="voxel-count" class="text-[10px] text-gray-500 mt-1 uppercase">Voxels: 65,536</div>
+            </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="flex justify-center items-end gap-4">
+            <div class="glass p-6 rounded-2xl flex flex-col gap-4 w-full max-w-xl ui-element">
+                <div class="flex justify-between items-center">
+                    <label class="text-xs font-mono text-gray-400 uppercase">Influence Horizon (Scale)</label>
+                    <span id="scale-val" class="text-xs font-mono text-orange-500">1.00x</span>
+                </div>
+                <input type="range" id="scale-slider" min="0.1" max="5.0" step="0.01" value="1.0" class="w-full accent-orange-600">
+                
+                <div class="flex gap-4 mt-2">
+                    <button id="chisel-btn" class="flex-1 py-3 glass hover:bg-orange-600/20 text-orange-500 font-bold rounded-xl transition-all border-orange-900/30">
+                        ACTIVATE CHISEL
+                    </button>
+                    <button id="reset-btn" class="px-6 py-3 glass hover:bg-white/10 text-gray-400 rounded-xl transition-all">
+                        RESET FIELD
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        /* Yoga Fire Kiln Visualizer 
+           Path B: The Window
+        */
+
+        const canvas = document.querySelector('#kiln-canvas');
+        const scaleSlider = document.querySelector('#scale-slider');
+        const scaleVal = document.querySelector('#scale-val');
+        const chiselBtn = document.querySelector('#chisel-btn');
+        const resetBtn = document.querySelector('#reset-btn');
+        const voxelLabel = document.querySelector('#voxel-count');
+
+        let device, context, pipeline, voxelBuffer;
+        let isChiseling = false;
+        let scale = 1.0;
+
+        // WGSL Shader: The Chisel Shader v0.1
+        const shaderSource = `
+            struct Uniforms {
+                matrix: mat4x4<f32>,
+                scale: f32,
+                time: f32,
+                padding: vec2<f32>,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            struct VertexInput {
+                @builtin(instance_index) instance: u32,
+                @location(0) position: vec3<f32>,
+            };
+
+            struct VertexOutput {
+                @builtin(position) pos: vec4<f32>,
+                @location(0) color: vec4<f32>,
+            };
+
+            @vertex
+            fn vs_main(input: VertexInput) -> VertexOutput {
+                // Saturated Field Generation (Simplified for demo)
+                let i = f32(input.instance);
+                let grid_size = 64.0; // 64x64x1 (Demo slice)
+                
+                let x = (f32(input.instance % 256u) / 256.0 - 0.5) * 2.0;
+                let y = (f32(input.instance / 256u) / 256.0 - 0.5) * 2.0;
+                
+                var out: VertexOutput;
+                
+                // Scale-Coherent Projection
+                let pos = vec4<f32>(x * uniforms.scale, y * uniforms.scale, 0.0, 1.0);
+                out.pos = uniforms.matrix * pos;
+                
+                // Branched Flow Simulation (Noise based on position and time)
+                let noise = sin(x * 10.0 + uniforms.time) * cos(y * 10.0 + uniforms.time);
+                let intensity = smoothstep(-1.0, 1.0, noise);
+                
+                out.color = vec4<f32>(
+                    0.8 + 0.2 * sin(uniforms.time + x), 
+                    0.4 + 0.1 * intensity, 
+                    0.1, 
+                    0.8
+                );
+                
+                return out;
+            }
+
+            @fragment
+            fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+                return input.color;
+            }
+        `;
+
+        async function init() {
+            if (!navigator.gpu) {
+                document.querySelector('#no-webgpu').classList.remove('hidden');
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            device = await adapter.requestDevice();
+            context = canvas.getContext('webgpu');
+
+            const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+            context.configure({
+                device,
+                format: presentationFormat,
+                alphaMode: 'premultiplied',
+            });
+
+            const shaderModule = device.createShaderModule({ code: shaderSource });
+
+            pipeline = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: {
+                    module: shaderModule,
+                    entryPoint: 'vs_main',
+                },
+                fragment: {
+                    module: shaderModule,
+                    entryPoint: 'fs_main',
+                    targets: [{ format: presentationFormat }],
+                },
+                primitive: {
+                    topology: 'point-list',
+                },
+            });
+
+            // Create Uniform Buffer
+            const uniformBufferSize = 4 * 16 + 4 + 4 + 8; // mat4x4, scale, time, padding
+            const uniformBuffer = device.createBuffer({
+                size: uniformBufferSize,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+
+            const bindGroup = device.createBindGroup({
+                layout: pipeline.getBindGroupLayout(0),
+                entries: [{
+                    binding: 0,
+                    resource: { buffer: uniformBuffer },
+                }],
+            });
+
+            function getProjectionMatrix() {
+                const aspect = canvas.width / canvas.height;
+                // Simple Orthographic projection
+                return new Float32Array([
+                    1 / aspect, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1
+                ]);
+            }
+
+            function frame(time) {
+                if (!device) return;
+
+                // Update Uniforms
+                const timeSec = time * 0.001;
+                const matrix = getProjectionMatrix();
+                
+                device.queue.writeBuffer(uniformBuffer, 0, matrix);
+                device.queue.writeBuffer(uniformBuffer, 64, new Float32Array([scale, timeSec]));
+
+                const commandEncoder = device.createCommandEncoder();
+                const textureView = context.getCurrentTexture().createView();
+
+                const renderPassDescriptor = {
+                    colorAttachments: [{
+                        view: textureView,
+                        clearValue: { r: 0.02, g: 0.02, b: 0.02, a: 1.0 },
+                        loadOp: 'clear',
+                        storeOp: 'store',
+                    }],
+                };
+
+                const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+                passEncoder.setPipeline(pipeline);
+                passEncoder.setBindGroup(0, bindGroup);
+                // Draw 65536 voxels (256x256 grid)
+                passEncoder.draw(1, 65536); 
+                passEncoder.end();
+
+                device.queue.submit([commandEncoder.finish()]);
+                requestAnimationFrame(frame);
+            }
+
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+            window.dispatchEvent(new Event('resize'));
+
+            requestAnimationFrame(frame);
+        }
+
+        // Logic Hooks
+        scaleSlider.addEventListener('input', (e) => {
+            scale = parseFloat(e.target.value);
+            scaleVal.textContent = `${scale.toFixed(2)}x`;
+        });
+
+        chiselBtn.addEventListener('mousedown', () => {
+            isChiseling = true;
+            chiselBtn.classList.add('bg-orange-600/40');
+            document.querySelector('#status-label').textContent = 'SYSTEM: CHISELING...';
+            document.querySelector('#status-label').classList.replace('text-green-400', 'text-orange-400');
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isChiseling) {
+                isChiseling = false;
+                chiselBtn.classList.remove('bg-orange-600/40');
+                document.querySelector('#status-label').textContent = 'SYSTEM: SATURATED';
+                document.querySelector('#status-label').classList.replace('text-orange-400', 'text-green-400');
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            scale = 1.0;
+            scaleSlider.value = 1.0;
+            scaleVal.textContent = '1.00x';
+        });
+
+        init();
+    </script>
+</body>
+</html>
