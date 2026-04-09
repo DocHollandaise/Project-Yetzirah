@@ -1,0 +1,32 @@
+📋 The DNA (src/seed_schema_v1.json)
+JSON
+{
+  "seed_id": "quartz_alpha_001",
+  "metadata": {
+    "name": "Alpha Quartz",
+    "formula": "SiO2",
+    "version": "1.0.0"
+  },
+  "material_dna": {
+    "mechanical": {
+      "bulk_density": 2.65,
+      "youngs_modulus": 95.0,
+      "poisson_ratio": 0.17
+    },
+    "optical": {
+      "refractive_index_base": 1.544,
+      "birefringence": 0.009
+    },
+    "acoustic": {
+      "phonon_velocity": 5800.0,
+      "attenuation_delta": 0.05
+    }
+  },
+  "lattice_logic": {
+    "system": "hexagonal",
+    "unit_cell": {
+      "a": 4.913,
+      "c": 5.405
+    }
+  }
+}
