@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yoga Fire | Quartz Kiln</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; background-color: #050505; color: #e5e7eb; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
+        canvas { width: 100vw; height: 100vh; display: block; }
+        .glass { background: rgba(15, 15, 15, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body>
+
+    <div id="no-webgpu" class="fixed inset-0 flex items-center justify-center bg-black z-50 hidden p-6 text-center">
+        <div class="glass p-8 rounded-2xl max-w-md border-t-2 border-orange-500">
+            <h1 class="text-2xl font-bold text-orange-500 mb-4">WebGPU Not Detected</h1>
+            <p class="text-gray-400 mb-6 font-mono text-sm">The Quartz Kiln requires a browser with WebGPU support (Chrome 113+ or Edge). Mobile support is experimental.</p>
+            <button onclick="location.reload()" class="px-6 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg transition-colors font-bold uppercase tracking-widest text-xs">Retry Ignition</button>
+        </div>
+    </div>
+
+    <canvas id="kiln-canvas"></canvas>
+
+    <div class="fixed inset-0 pointer-events-none flex flex-col justify-between p-6">
+        <div class="flex justify-between items-start">
+            <div class="glass p-4 rounded-xl border-l-4 border-orange-600">
+                <h1 class="text-xl font-black tracking-tighter text-orange-500 uppercase italic">Yoga Fire</h1>
+                <p class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Target: Alpha Quartz (SiO₂)</p>
+            </div>
+            <div class="glass p-4 rounded-xl text-right">
+                <div id="status" class="text-xs font-mono text-green-400 underline decoration-green-900">FIELD: SATURATED</div>
+                <div class="text-[9px] text-gray-500 mt-1 uppercase">Symmetry: Hexagonal P3₂21</div>
+            </div>
+        </div>
+
+        <div class="flex justify-center items-end gap-4">
+            <div class="glass p-6 rounded-3xl flex flex-col gap-4 w-full max-w-lg pointer-events-auto border-b-4 border-orange-900">
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Lattice Scale (Influence)</label>
+                    <span id="scale-val" class="text-xs font-mono text-orange-500">1.00x</span>
+                </div>
+                <input type="range" id="scale-slider" min="0.5" max="10.0" step="0.01" value="1.0" class="w-full accent-orange-600 cursor-pointer">
+                
+                <div class="flex gap-3 mt-2">
+                    <button id="chisel-btn" class="flex-1 py-3 bg-white/5 hover:bg-orange-600/20 text-orange-500 font-black rounded-xl transition-all border border-orange-900/30 uppercase tracking-widest text-xs">
+                        Initiate Chisel
+                    </button>
+                    <button id="reset-btn" class="px-6 py-3 bg-white/5 hover:bg-white/10 text-gray-500 rounded-xl transition-all text-xs font-bold uppercase">
+                        Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        const canvas = document.querySelector('#kiln-canvas');
+        const scaleSlider = document.querySelector('#scale-slider');
+        const scaleVal = document.querySelector('#scale-val');
+        const chiselBtn = document.querySelector('#chisel-btn');
+        const statusLabel = document.querySelector('#status');
+
+        let device, context, pipeline, uniformBuffer;
+        let scale = 1.0;
+        let isChiseling = false;
+
+        const shaderSource = `
+            struct Uniforms {
+                matrix: mat4x4<f32>,
+                scale: f32,
+                time: f32,
+                lattice_a: f32,
+                lattice_c: f32,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            struct VertexOutput {
+                @builtin(position) pos: vec4<f32>,
+                @location(0) color: vec4<f32>,
+            };
+
+            @vertex
+            fn vs_main(@builtin(instance_index) instance: u32) -> VertexOutput {
+                let grid_res = 128.0;
+                let x_idx = f32(instance % 128u);
+                let y_idx = f32(instance / 128u);
+                
+                // Hexagonal Lattice projection for Quartz (a = 4.913, c = 5.405)
+                let a = uniforms.lattice_a * 0.1;
+                let x = (x_idx - 64.0) * a;
+                let y = (y_idx - 64.0) * a * 0.866; // cos(30 deg) for hex grid
+                
+                // Add jitter/noise for "Branched Flow" visualization
+                let noise = sin(x * 5.0 + uniforms.time) * cos(y * 5.0 - uniforms.time);
+                let z = noise * 0.1 * uniforms.scale;
+                
+                var out: VertexOutput;
+                let pos = vec4<f32>(x * uniforms.scale, y * uniforms.scale, z, 1.0);
+                out.pos = uniforms.matrix * pos;
+                
+                // Phonon Pulse color mapping (Intensity based on Young's Modulus E=95)
+                let intensity = abs(noise);
+                out.color = vec4<f32>(0.9, 0.4 + intensity * 0.3, 0.1, 0.6);
+                
+                return out;
+            }
+
+            @fragment
+            fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+                return input.color;
+            }
+        `;
+
+        async function init() {
+            if (!navigator.gpu) {
+                document.querySelector('#no-webgpu').classList.remove('hidden');
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            device = await adapter.requestDevice();
+            context = canvas.getContext('webgpu');
+
+            const format = navigator.gpu.getPreferredCanvasFormat();
+            context.configure({ device, format, alphaMode: 'premultiplied' });
+
+            const shader = device.createShaderModule({ code: shaderSource });
+            pipeline = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: { module: shader, entryPoint: 'vs_main' },
+                fragment: { module: shader, entryPoint: 'fs_main', targets: [{ format }] },
+                primitive: { topology: 'point-list' }
+            });
+
+            uniformBuffer = device.createBuffer({
+                size: 64 + 16, // mat4, scale, time, a, c
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+
+            const bindGroup = device.createBindGroup({
+                layout: pipeline.getBindGroupLayout(0),
+                entries: [{ binding: 0, resource: { buffer: uniformBuffer } }]
+            });
+
+            function frame(time) {
+                const aspect = canvas.width / canvas.height;
+                const matrix = new Float32Array([1/aspect, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+                
+                device.queue.writeBuffer(uniformBuffer, 0, matrix);
+                device.queue.writeBuffer(uniformBuffer, 64, new Float32Array([scale, time * 0.001, 4.913, 5.405]));
+
+                const encoder = device.createCommandEncoder();
+                const pass = encoder.beginRenderPass({
+                    colorAttachments: [{
+                        view: context.getCurrentTexture().createView(),
+                        clearValue: { r: 0.02, g: 0.02, b: 0.02, a: 1.0 },
+                        loadOp: 'clear', storeOp: 'store'
+                    }]
+                });
+                pass.setPipeline(pipeline);
+                pass.setBindGroup(0, bindGroup);
+                pass.draw(1, 16384); // 128x128 grid
+                pass.end();
+                device.queue.submit([encoder.finish()]);
+                requestAnimationFrame(frame);
+            }
+
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+            window.dispatchEvent(new Event('resize'));
+            requestAnimationFrame(frame);
+        }
+
+        scaleSlider.addEventListener('input', (e) => {
+            scale = parseFloat(e.target.value);
+            scaleVal.textContent = `${scale.toFixed(2)}x`;
+        });
+
+        chiselBtn.addEventListener('mousedown', () => {
+            isChiseling = true;
+            statusLabel.textContent = 'STATUS: CHISELING...';
+            statusLabel.className = 'text-xs font-mono text-orange-500 underline decoration-orange-900';
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isChiseling) {
+                isChiseling = false;
+                statusLabel.textContent = 'FIELD: SATURATED';
+                statusLabel.className = 'text-xs font-mono text-green-400 underline decoration-green-900';
+            }
+        });
+
+        init();
+    </script>
+</body>
+</html>
